@@ -1,0 +1,11 @@
+# Tablets Remainder
+
+node_modules/
+.env
+.DS_Store
+build/
+dist/
+*.log
+.wwebjs_auth/
+.wwebjs_cache/
+medications.json
