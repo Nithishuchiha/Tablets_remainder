@@ -60,7 +60,7 @@ Fill in these settings:
 - **Branch**: `main`
 - **Root Directory**: `backend`
 - **Environment**: `Node`
-- **Build Command**: `npm install`
+- **Build Command**: `npm install && npx puppeteer browsers install chrome`
 - **Start Command**: `npm start`
 - **Plan**: Select "Free"
 
@@ -68,6 +68,7 @@ Fill in these settings:
 Scroll down to "Environment Variables" and click "Add Environment Variable":
 - Variable: `NODE_ENV` → Value: `production`
 - Variable: `PORT` → Value: `10000`
+- Variable: `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD` → Value: `false`
 
 #### 5. Click "Create Web Service"
 - Wait 5-10 minutes for first deployment
@@ -210,6 +211,15 @@ Now you can:
 - Check backend logs on Render
 - Rescan QR code if needed
 - Restart backend service
+
+### "Could not find Chrome" Error
+**Symptoms**: Error message "Could not find Chrome" or "puppeteer" in deployment logs
+
+**Solution**:
+1. Update your build command to: `npm install && npx puppeteer browsers install chrome`
+2. Add environment variable: `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD` = `false`
+3. Commit and push changes to GitHub
+4. Render will automatically redeploy
 
 ### "Can't connect to backend"
 - Check if backend is "Live" on Render
