@@ -3,5 +3,5 @@
  */
 module.exports = {
   skipDownload: true,
-  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+  // Let the server.js handle executable path detection
 };

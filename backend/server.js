@@ -8,9 +8,48 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+// Function to detect Chrome executable path
+const detectChromePath = () => {
+    // Try to read from build script output
+    const chromePathFile = path.join(__dirname, '.chrome_path');
+    if (fs.existsSync(chromePathFile)) {
+        const detectedPath = fs.readFileSync(chromePathFile, 'utf8').trim();
+        console.log('📍 Chrome path from build:', detectedPath);
+        if (fs.existsSync(detectedPath)) {
+            return detectedPath;
+        }
+    }
+    
+    // Fallback to environment variable
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        console.log('📍 Chrome path from env:', process.env.PUPPETEER_EXECUTABLE_PATH);
+        return process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+    
+    // Try common paths
+    const commonPaths = [
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/usr/bin/google-chrome',
+        '/usr/bin/google-chrome-stable'
+    ];
+    
+    for (const chromePath of commonPaths) {
+        if (fs.existsSync(chromePath)) {
+            console.log('📍 Found Chrome at:', chromePath);
+            return chromePath;
+        }
+    }
+    
+    console.log('⚠️ No Chrome path specified, using Puppeteer default');
+    return undefined; // Let Puppeteer use its bundled Chrome
+};
+
+const chromePath = detectChromePath();
+
 // Log Puppeteer configuration for debugging
 console.log('🔧 Puppeteer Configuration:');
-console.log('PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
+console.log('Detected Chrome Path:', chromePath);
 console.log('PUPPETEER_SKIP_CHROMIUM_DOWNLOAD:', process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD);
 console.log('NODE_ENV:', process.env.NODE_ENV);
 
@@ -55,11 +94,14 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
+            '--single-process',
             '--disable-gpu'
         ],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+        executablePath: chromePath
     }
 });
+
+console.log('🚀 WhatsApp Client initialized with Chrome at:', chromePath || 'default');
 
 let isWhatsAppReady = false;
 
