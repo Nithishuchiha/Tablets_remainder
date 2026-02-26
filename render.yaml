@@ -3,18 +3,19 @@ services:
     name: tablet-reminder-backend
     runtime: node
     rootDir: backend
-    buildCommand: npm install
+    buildCommand: |
+      apt-get update && apt-get install -y \
+        chromium \
+        chromium-sandbox \
+        fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf \
+        libxss1 \
+        --no-install-recommends && \
+      npm install
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-        value: false
+        value: true
       - key: PUPPETEER_EXECUTABLE_PATH
-        value: /opt/render/.cache/puppeteer/chrome/linux-*/chrome-linux*/chrome
-    # Install Chrome dependencies
-    nativeEnvironment:
-      - key: apt-packages
-        value: |
-          chromium
-          chromium-sandbox
+        value: /usr/bin/chromium
