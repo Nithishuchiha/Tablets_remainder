@@ -8,6 +8,12 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+// Log Puppeteer configuration for debugging
+console.log('🔧 Puppeteer Configuration:');
+console.log('PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
+console.log('PUPPETEER_SKIP_CHROMIUM_DOWNLOAD:', process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD);
+console.log('NODE_ENV:', process.env.NODE_ENV);
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
