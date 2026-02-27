@@ -1,60 +1,34 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
 const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-// Function to detect Chrome executable path
-const detectChromePath = () => {
-    // Try to read from build script output
-    const chromePathFile = path.join(__dirname, '.chrome_path');
-    if (fs.existsSync(chromePathFile)) {
-        const detectedPath = fs.readFileSync(chromePathFile, 'utf8').trim();
-        console.log('📍 Chrome path from build:', detectedPath);
-        if (fs.existsSync(detectedPath)) {
-            return detectedPath;
-        }
-    }
-    
-    // Fallback to environment variable
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-        console.log('📍 Chrome path from env:', process.env.PUPPETEER_EXECUTABLE_PATH);
-        return process.env.PUPPETEER_EXECUTABLE_PATH;
-    }
-    
-    // Try common paths
-    const commonPaths = [
-        '/usr/bin/chromium-browser',
-        '/usr/bin/chromium',
-        '/usr/bin/google-chrome',
-        '/usr/bin/google-chrome-stable'
-    ];
-    
-    for (const chromePath of commonPaths) {
-        if (fs.existsSync(chromePath)) {
-            console.log('📍 Found Chrome at:', chromePath);
-            return chromePath;
-        }
-    }
-    
-    console.log('⚠️ No Chrome path specified, using Puppeteer default');
-    return undefined; // Let Puppeteer use its bundled Chrome
-};
-
-const chromePath = detectChromePath();
-
-// Log Puppeteer configuration for debugging
-console.log('🔧 Puppeteer Configuration:');
-console.log('Detected Chrome Path:', chromePath);
-console.log('PUPPETEER_SKIP_CHROMIUM_DOWNLOAD:', process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD);
-console.log('NODE_ENV:', process.env.NODE_ENV);
-
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Initialize Twilio client (will be null if credentials aren't set)
+let twilioClient = null;
+let isTwilioConfigured = false;
+
+try {
+    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+        const twilio = require('twilio');
+        twilioClient = twilio(
+            process.env.TWILIO_ACCOUNT_SID,
+            process.env.TWILIO_AUTH_TOKEN
+        );
+        isTwilioConfigured = true;
+        console.log('✅ Twilio WhatsApp configured successfully');
+    } else {
+        console.log('⚠️  Twilio credentials not found. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env file');
+        console.log('📝 Running in demo mode - messages will be logged but not sent');
+    }
+} catch (error) {
+    console.error('❌ Failed to initialize Twilio:', error.message);
+}
 
 // CORS Configuration for production and development
 const corsOptions = {
@@ -82,57 +56,6 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
-// WhatsApp Client Setup
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process',
-            '--disable-gpu'
-        ],
-        executablePath: chromePath
-    }
-});
-
-console.log('🚀 WhatsApp Client initialized with Chrome at:', chromePath || 'default');
-
-let isWhatsAppReady = false;
-
-// QR Code Generation for WhatsApp Web
-client.on('qr', (qr) => {
-    console.log('\n📱 Scan this QR code with WhatsApp:');
-    qrcode.generate(qr, { small: true });
-});
-
-client.on('ready', () => {
-    console.log('✅ WhatsApp Client is ready!');
-    isWhatsAppReady = true;
-});
-
-client.on('authenticated', () => {
-    console.log('✅ WhatsApp authenticated successfully!');
-});
-
-client.on('auth_failure', (msg) => {
-    console.error('❌ Authentication failed:', msg);
-    isWhatsAppReady = false;
-});
-
-client.on('disconnected', (reason) => {
-    console.log('❌ WhatsApp disconnected:', reason);
-    isWhatsAppReady = false;
-});
-
-// Initialize WhatsApp client
-client.initialize();
-
 // Data storage file path
 const DATA_FILE = path.join(__dirname, 'medications.json');
 
@@ -158,22 +81,31 @@ const writeData = (data) => {
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 };
 
-// Send WhatsApp message function
+// Send WhatsApp message function using Twilio
 const sendWhatsAppMessage = async (phoneNumber, message) => {
-    if (!isWhatsAppReady) {
-        throw new Error('WhatsApp is not ready. Please scan the QR code first.');
+    if (!isTwilioConfigured) {
+        console.log(`📝 [DEMO MODE] Would send to ${phoneNumber}:`, message);
+        return { demo: true, message: 'Twilio not configured - message logged only' };
     }
 
     try {
-        // Format phone number (remove any non-digit characters)
-        const formattedNumber = phoneNumber.replace(/\D/g, '');
-        const chatId = `${formattedNumber}@c.us`;
+        // Format phone number - ensure it starts with + and country code
+        let formattedNumber = phoneNumber.replace(/\D/g, '');
+        if (!formattedNumber.startsWith('+')) {
+            // Add + prefix if not present
+            formattedNumber = '+' + formattedNumber;
+        }
         
-        await client.sendMessage(chatId, message);
-        console.log(`✅ Message sent to ${phoneNumber}`);
-        return true;
+        const result = await twilioClient.messages.create({
+            body: message,
+            from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`, // Your Twilio WhatsApp number
+            to: `whatsapp:${formattedNumber}`
+        });
+        
+        console.log(`✅ Message sent to ${phoneNumber} - SID: ${result.sid}`);
+        return { success: true, sid: result.sid };
     } catch (error) {
-        console.error(`❌ Failed to send message to ${phoneNumber}:`, error);
+        console.error(`❌ Failed to send message to ${phoneNumber}:`, error.message);
         throw error;
     }
 };
@@ -189,7 +121,7 @@ const scheduleReminders = () => {
         
         data.medications.forEach(async (med) => {
             if (med.active && med.times.includes(currentTime)) {
-                const message = `🔔 *Medication Reminder*\n\n💊 *${med.name}*\n📋 Dosage: ${med.dosage}\n⏰ Time: ${currentTime}\n\n${med.notes ? `📝 Note: ${med.notes}\n\n` : ''}Please take your medication now! 🙏`;
+                const message = `🔔 MEDICATION REMINDER\n\n💊 ${med.name}\n📋 Dosage: ${med.dosage}\n⏰ Time: ${currentTime}\n\n${med.notes ? `📝 Note: ${med.notes}\n\n` : ''}Please take your medication now! 🙏`;
                 
                 // Send to all contacts
                 for (const contact of data.contacts) {
@@ -203,7 +135,7 @@ const scheduleReminders = () => {
         });
     });
     
-    console.log('📅 Reminder scheduler started');
+    console.log('📅 Reminder scheduler started - checking every minute');
 };
 
 // Start the scheduler
@@ -213,7 +145,11 @@ scheduleReminders();
 
 // Get WhatsApp status
 app.get('/api/whatsapp/status', (req, res) => {
-    res.json({ ready: isWhatsAppReady });
+    res.json({ 
+        ready: isTwilioConfigured,
+        provider: 'Twilio WhatsApp API',
+        mode: isTwilioConfigured ? 'production' : 'demo'
+    });
 });
 
 // Get all medications
@@ -313,7 +249,8 @@ app.post('/api/test-message', async (req, res) => {
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        whatsapp: isWhatsAppReady,
+        whatsapp: isTwilioConfigured ? 'configured' : 'demo-mode',
+        provider: 'Twilio',
         timestamp: new Date().toISOString()
     });
 });
@@ -322,5 +259,9 @@ app.get('/api/health', (req, res) => {
 app.listen(PORT, () => {
     console.log(`\n🚀 Server running on port ${PORT}`);
     console.log(`📡 API available at http://localhost:${PORT}/api`);
-    console.log('\n⏳ Waiting for WhatsApp connection...\n');
+    if (isTwilioConfigured) {
+        console.log('✅ WhatsApp messaging enabled via Twilio\n');
+    } else {
+        console.log('⚠️  Running in DEMO mode - configure Twilio to send real messages\n');
+    }
 });

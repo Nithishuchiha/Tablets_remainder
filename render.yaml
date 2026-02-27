@@ -3,10 +3,16 @@ services:
     name: tablet-reminder-backend
     runtime: node
     rootDir: backend
-    buildCommand: chmod +x render-build.sh && ./render-build.sh
+    buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-        value: "true"
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
